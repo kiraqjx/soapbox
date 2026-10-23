@@ -3,6 +3,7 @@ import { RouterView } from 'vue-router'
 import AppHeader from './components/AppHeader.vue'
 import AppFooter from './components/AppFooter.vue'
 import ToastHost from './components/ToastHost.vue'
+import TourGuide from './components/TourGuide.vue'
 </script>
 
 <template>
@@ -14,6 +15,7 @@ import ToastHost from './components/ToastHost.vue'
   </RouterView>
   <AppFooter />
   <ToastHost />
+  <TourGuide />
 </template>
 
 <style>

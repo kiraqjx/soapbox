@@ -7,6 +7,9 @@ import { toast } from '../composables/useToast'
 const testing = ref(false)
 const testResult = ref(null)
 
+const EMAIL = '2631133172@qq.com'
+const GITHUB = 'https://github.com/kiraqjx/soapbox'
+
 const mixedContent = computed(
   () =>
     typeof window !== 'undefined' &&
@@ -61,7 +64,7 @@ function reset() {
     </div>
 
     <div class="stack">
-      <section class="card">
+      <section class="card" data-tour="settings-model">
         <div class="card__head">
           <div class="card__title">OpenAI 兼容接口</div>
           <span class="badge">配置保存在本机浏览器</span>
@@ -146,6 +149,24 @@ function reset() {
           <button class="btn btn--ghost" @click="exportData">导出全部数据</button>
           <button class="btn-link btn-link--danger" @click="reset">清空本地数据</button>
           <span class="tiny muted">偶尔导出一份备份吧，清浏览器缓存时会把这些一起带走。</span>
+        </div>
+      </section>
+
+      <section class="card" data-tour="settings-contact">
+        <div class="card__head">
+          <div class="card__title">想要什么功能？</div>
+          <span class="badge">说一声就行</span>
+        </div>
+        <p class="small muted" style="margin: 0 0 14px; line-height: 1.9">
+          这个工坊还在长。缺一个场合、某个文件读不出来、句子不像你说话——都可以直接告诉我，
+          我会按收到的需求排优先级。
+        </p>
+        <div class="row row--wrap">
+          <a class="btn btn--ghost btn--sm" :href="`mailto:${EMAIL}`">发邮件 · {{ EMAIL }}</a>
+          <a class="btn btn--ghost btn--sm" :href="`${GITHUB}/issues`" target="_blank" rel="noopener">
+            GitHub 提 Issue
+          </a>
+          <a class="btn-link" :href="GITHUB" target="_blank" rel="noopener">看源码 →</a>
         </div>
       </section>
 

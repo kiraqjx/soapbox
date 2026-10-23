@@ -294,7 +294,7 @@ onBeforeUnmount(() => controller?.abort())
 
     <div class="two-col">
       <div class="stack">
-        <section class="card">
+        <section class="card" data-tour="revise-source">
           <div class="card__head">
             <div class="card__title">待改原稿</div>
             <span class="badge">{{ countChars(source) }} 字 · 约 {{ (countChars(source) / 240).toFixed(1) }} 分钟</span>

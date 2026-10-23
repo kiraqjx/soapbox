@@ -2,6 +2,9 @@
 import { RouterLink } from 'vue-router'
 import { SCENE_FAMILIES } from '../services/scenes'
 
+const EMAIL = '2631133172@qq.com'
+const GITHUB = 'https://github.com/kiraqjx/soapbox'
+
 const steps = [
   {
     num: '01',
@@ -178,5 +181,23 @@ const capabilities = [
         </p>
       </div>
     </div>
+
+    <section class="contact-band">
+      <div class="contact-band__copy">
+        <div class="eyebrow">缺什么，直接说</div>
+        <h2>想要的功能，写信告诉我</h2>
+        <p>
+          这个工坊还在长：少一种场合、某个文件读不出来、改出来的句子不像你说话——
+          都可以直接说一声。邮件我都会看，GitHub 上的 Issue 也一样。
+        </p>
+      </div>
+      <div class="contact-band__actions">
+        <a class="btn btn--ink" :href="`mailto:${EMAIL}`">发邮件 · {{ EMAIL }}</a>
+        <a class="btn btn--ghost" :href="`${GITHUB}/issues`" target="_blank" rel="noopener">
+          GitHub 提 Issue
+        </a>
+        <a class="contact-band__repo" :href="GITHUB" target="_blank" rel="noopener">仓库地址 →</a>
+      </div>
+    </section>
   </main>
 </template>

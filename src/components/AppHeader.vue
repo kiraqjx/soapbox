@@ -22,7 +22,7 @@ const nav = [
         </span>
       </RouterLink>
 
-      <nav class="site-nav">
+      <nav class="site-nav" data-tour="site-nav">
         <RouterLink
           v-for="item in nav"
           :key="item.to"

@@ -317,7 +317,7 @@ function removeCurrent() {
       </aside>
 
       <div class="stack">
-        <section class="card">
+        <section class="card" data-tour="profiles-detail">
           <div class="card__head">
             <div class="card__title">档案详情</div>
             <span v-if="dirty" class="badge badge--warn">未保存</span>
@@ -325,7 +325,7 @@ function removeCurrent() {
           </div>
 
           <div class="stack" style="gap: 18px">
-            <div class="field">
+            <div class="field" data-tour="profiles-family">
               <span class="field__label">先选场合（场景族）</span>
               <div class="family-grid">
                 <button

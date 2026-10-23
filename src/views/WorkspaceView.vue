@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
 
     <div class="two-col two-col--wide-right">
       <div class="stack">
-        <section class="card">
+        <section class="card" data-tour="workspace-materials">
           <div class="card__head">
             <div class="card__title">素材</div>
             <div class="row" style="gap: 10px">
@@ -346,7 +346,7 @@ onBeforeUnmount(() => {
           </p>
         </section>
 
-        <section class="card">
+        <section class="card" data-tour="workspace-generate">
           <div class="card__head">
             <div class="card__title">生成设置</div>
             <span class="badge">{{ familyLabel }} · 目标 {{ target }} 字 · {{ activeProfile?.duration || 5 }} 分钟</span>
@@ -378,7 +378,7 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section class="card">
+        <section class="card" data-tour="workspace-draft">
           <div class="card__head">
             <div class="card__title">讲稿</div>
             <div class="row row--wrap" style="gap: 10px">
@@ -413,7 +413,7 @@ onBeforeUnmount(() => {
       </div>
 
       <aside class="sticky-col">
-        <div class="card" style="display: flex; flex-direction: column; gap: 2px">
+        <div class="card" data-tour="workspace-chat" style="display: flex; flex-direction: column; gap: 2px">
           <ChatPanel
             :messages="state.chat"
             :busy="chatBusy"
