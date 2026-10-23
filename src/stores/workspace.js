@@ -244,25 +244,10 @@ export function clearMaterials() {
   state.materials.splice(0, state.materials.length)
 }
 
-/* ------------------------- 草稿与对话 ------------------------- */
+/* ------------------------- 草稿 ------------------------- */
 
 export function setDraft(text) {
   state.draft = text
-}
-
-export function pushChat(message) {
-  const item = { id: uid('msg'), at: Date.now(), ...message }
-  state.chat.push(item)
-  return item
-}
-
-export function updateChatMessage(id, patch) {
-  const msg = state.chat.find((m) => m.id === id)
-  if (msg) Object.assign(msg, patch)
-}
-
-export function clearChat() {
-  state.chat.splice(0, state.chat.length)
 }
 
 export function resetAll() {

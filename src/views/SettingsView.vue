@@ -45,7 +45,7 @@ function exportData() {
 }
 
 function reset() {
-  if (!window.confirm('清空所有档案、素材、草稿与对话？此操作不可撤销，建议先导出备份。')) return
+  if (!window.confirm('清空所有档案、素材、草稿与改稿记录？此操作不可撤销，建议先导出备份。')) return
   resetAll()
   toast('已恢复初始状态')
 }
@@ -118,7 +118,7 @@ function reset() {
           </div>
 
           <div class="callout">
-            没接模型的时候，成稿、诊断、逐条修改和对话都交给本地规则引擎。它的好处是稳定、看得懂每一步，
+            没接模型的时候，成稿、诊断、逐条修改和「一句话改稿」都交给本地规则引擎。它的好处是稳定、看得懂每一步，
             缺点是句子没那么灵活。想要更像你本人说话，再接上模型就好。
           </div>
         </div>
@@ -132,7 +132,7 @@ function reset() {
           <div>
             <h3 class="serif" style="font-size: 15px; margin-bottom: 6px">本地解析，本地存储</h3>
             <p class="small muted" style="margin: 0; line-height: 1.9">
-              PPTX / DOCX / PDF 在浏览器内解包读取；档案、素材文本、草稿与对话保存在 localStorage。
+              PPTX / DOCX / PDF 在浏览器内解包读取；档案、素材文本、草稿与改稿记录保存在 localStorage。
               关闭远程模型时，文件内容不会离开这台设备。
             </p>
           </div>

@@ -1856,11 +1856,14 @@ a.family-card:hover {
 
 .card__head {
   border-bottom: 1px dashed var(--line);
+  /* 头部徽标多时换行，别把标题挤成竖排 */
+  flex-wrap: wrap;
 }
 
 .card__title {
   font-size: 17px;
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .card__title::before {
@@ -3079,4 +3082,360 @@ a.family-card:hover {
 
 .profile-switch__foot a {
   text-decoration: none;
+}
+
+/* ---------------- 移动端适配 ---------------- */
+
+@media (max-width: 760px) {
+  .site-header__inner {
+    padding: 9px 14px;
+    gap: 8px 10px;
+    flex-wrap: wrap;
+  }
+
+  .site-nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .site-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .site-nav a {
+    padding: 5px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .site-header .profile-switch {
+    order: 2;
+    margin-left: auto;
+    min-width: 0;
+  }
+
+  .site-header .profile-switch__trigger {
+    max-width: 46vw;
+    padding: 5px 12px;
+  }
+
+  .profile-switch__name {
+    min-width: 0;
+  }
+
+  .page-head .profile-switch__trigger {
+    max-width: 100%;
+  }
+
+  /* 触摸屏上给徽标式触发器留够可点高度 */
+  .profile-switch__trigger--badge,
+  .profile-switch__trigger--brick {
+    padding: 4px 10px;
+  }
+
+  .debug-toggle {
+    order: 2;
+    padding: 5px 9px;
+  }
+
+  .page {
+    padding: 20px 14px 56px;
+  }
+
+  .page-head {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .page-head h1 {
+    font-size: 25px;
+  }
+
+  .page-head p {
+    font-size: 13px;
+    line-height: 1.8;
+  }
+
+  .page-head .row {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .card {
+    padding: 17px;
+  }
+
+  .card--tight {
+    padding: 14px;
+  }
+
+  .card__head {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 6px;
+  }
+
+  .card__title {
+    font-size: 16px;
+  }
+
+  .two-col {
+    gap: 14px;
+  }
+
+  .grid-2,
+  .grid-3 {
+    gap: 12px;
+  }
+
+  .section-head {
+    margin: 40px 0 18px;
+  }
+
+  .section-head h2 {
+    font-size: 21px;
+  }
+
+  .section-head h2::before {
+    margin-right: 10px;
+  }
+
+  .section-head p {
+    font-size: 12.5px;
+  }
+
+  .family-grid {
+    gap: 8px;
+  }
+
+  .family-card {
+    min-height: 82px;
+    padding: 12px 13px;
+  }
+
+  .step-card {
+    padding: 20px 18px;
+  }
+
+  .step-card__num {
+    font-size: 38px;
+  }
+
+  .hero {
+    padding: 10px 0 34px;
+    gap: 24px;
+  }
+
+  .hero h1 {
+    font-size: 32px;
+  }
+
+  .hero__lead {
+    font-size: 14.5px;
+    line-height: 1.85;
+  }
+
+  .hero__actions {
+    flex-direction: column;
+    align-items: stretch;
+    margin-top: 18px;
+  }
+
+  .hero__meta {
+    gap: 16px 22px;
+    margin-top: 24px;
+  }
+
+  .hero__meta b {
+    font-size: 21px;
+  }
+
+  .poster {
+    padding: 20px 18px 18px;
+    transform: none;
+  }
+
+  .poster__note {
+    font-size: 13.5px;
+    line-height: 1.95;
+  }
+
+  .quote-band {
+    padding: 22px 20px;
+    margin-top: 40px;
+  }
+
+  .quote-band p {
+    font-size: 16.5px;
+    line-height: 1.85;
+  }
+
+  .contact-band {
+    margin-top: 40px;
+  }
+
+  .contact-band h2 {
+    font-size: 20px;
+  }
+
+  .contact-band p {
+    font-size: 13px;
+  }
+
+  .chat {
+    min-height: 340px;
+  }
+
+  .chat__log {
+    max-height: 340px;
+    padding: 12px;
+  }
+
+  .chat__composer .textarea {
+    min-height: 56px;
+    font-size: 16px;
+  }
+
+  .textarea--draft {
+    min-height: 300px;
+    font-size: 15px;
+    line-height: 1.9;
+  }
+
+  /* iOS 上小于 16px 的输入框会在聚焦时自动放大页面 */
+  .input,
+  .select,
+  .textarea {
+    font-size: 16px;
+  }
+
+  .diff-pane {
+    max-height: 380px;
+    padding: 14px 15px;
+    font-size: 13.5px;
+  }
+
+  .model-trace__reasoning pre {
+    max-height: 200px;
+  }
+
+  .issue {
+    padding: 11px 12px;
+  }
+
+  .material__top {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .material__name {
+    flex: 1 1 100%;
+  }
+
+  .parse-debug {
+    padding: 14px;
+  }
+
+  .parse-debug__row {
+    gap: 6px;
+  }
+
+  .parse-debug__copy {
+    margin-left: 0;
+  }
+
+  .tour-card {
+    padding: 16px 16px 10px;
+  }
+
+  .tour-card__title {
+    font-size: 18px;
+  }
+
+  .site-footer {
+    padding: 20px 14px 22px;
+  }
+
+  .site-footer__inner {
+    gap: 10px 16px;
+    font-size: 11px;
+  }
+
+  .site-footer__contact {
+    padding: 10px 12px;
+    font-size: 11.5px;
+    gap: 8px;
+  }
+
+  .site-footer__contact a {
+    word-break: break-all;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand__text {
+    display: none;
+  }
+
+  /* 五个栏目要能一屏排完，别让最后一项被裁成半截 */
+  .site-nav {
+    gap: 0;
+  }
+
+  .site-nav a {
+    padding: 5px 6px;
+    font-size: 12.5px;
+  }
+
+  .site-header .profile-switch__trigger {
+    max-width: 44vw;
+  }
+
+  .page {
+    padding: 16px 12px 48px;
+  }
+
+  .page-head h1 {
+    font-size: 23px;
+  }
+
+  .card {
+    padding: 15px;
+  }
+
+  .hero h1 {
+    font-size: 29px;
+  }
+
+  .hero__meta {
+    gap: 14px 18px;
+  }
+
+  .debug-toggle {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+
+  .btn {
+    padding: 9px 14px;
+  }
+
+  .family-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-head .row .badge {
+    font-size: 10.5px;
+  }
+
+  .chat__log {
+    max-height: 300px;
+  }
 }

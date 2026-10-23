@@ -146,19 +146,44 @@ export async function testConnection(settings) {
   return { ok: false, message: `连接失败 ${res.status}${detail ? `：${detail.slice(0, 120)}` : ''}` }
 }
 
-export async function reviseRemote({ profile, materials, source, settings, onToken, onReasoning, signal }) {
+export async function reviseRemote({
+  profile,
+  materials,
+  source,
+  instruction = '',
+  settings,
+  onToken,
+  onReasoning,
+  signal,
+}) {
   const packet = buildContextPacket(profile, materials)
+  const focus = (instruction || '').trim()
   const system = `${packetToSystemPrompt(packet)}
 
 【本次任务：改稿，不是重写】
 - 保留原稿的事实、顺序与个人语气，只修改表达。
 - 按「${packet.family.name}」的标准改：${packet.family.desc}。
 - 不得新增素材与原稿中不存在的数字、人名、日期；需要补数据处保留「（待补充：…）」。
-- 输出修改后的完整稿件，直接用【小节名】分段，不要解释修改过程，不要使用 Markdown 符号。`
+- 输出修改后的完整稿件，直接用【小节名】分段，不要解释修改过程，不要使用 Markdown 符号。${
+    focus
+      ? `
+
+【本轮只做这一件事】
+用户要求：${focus}
+- 只改与这条要求直接相关的句子和段落，其余内容、小节顺序、小节名原样保留。
+- 这条要求如果是要补充内容（案例、互动、答疑、清单），就加在最合适的小节里，不要为此新开章节。
+- 仍然输出完整稿件，供前后对照。`
+      : ''
+  }`
   const text = await callChat({
     settings,
     system,
-    messages: [{ role: 'user', content: `请修改这份讲稿：\n\n${source}` }],
+    messages: [
+      {
+        role: 'user',
+        content: focus ? `按这条要求改：${focus}\n\n讲稿：\n\n${source}` : `请修改这份讲稿：\n\n${source}`,
+      },
+    ],
     onToken,
     onReasoning,
     signal,
@@ -1080,14 +1105,14 @@ function applyCommand(text, command, ctx) {
   return text
 }
 
-/* ============================ 本地引擎：对话 ============================ */
+/* ============================ 本地引擎：把一句话要求落到稿子上 ============================ */
 
-export function localChatReply({ draft = '', profile, materials = [], message = '' }) {
+export function localInstructionEdit({ draft = '', profile, materials = [], instruction = '' }) {
   const p = safeProfile(profile)
   const family = familyOf(p)
   const packet = buildContextPacket(p, materials)
   const points = buildPoints(packet, materials)
-  const text = message.trim()
+  const text = (instruction || '').trim()
   const hasDraft = !!(draft && draft.trim())
   const cpm = charsPerMinute(family)
 
@@ -1242,8 +1267,16 @@ export function localChatReply({ draft = '', profile, materials = [], message = 
   }
 
   if (/被追问|提问|问答|qa/i.test(text)) {
+    if (!hasDraft) return { content: '先把稿子写出来，我再把可能被追问的问题附在后面。' }
+    if (draft.includes('备用·现场问答')) {
+      return { content: '稿子末尾已经有「备用·现场问答」这一节了，现场用得上再看，不必重复加。' }
+    }
     return {
-      content: `提前准备这三个问题：\n\n${qaBlock(p, packet, points)}`,
+      content: '把最可能被追问的三个问题和答法，作为「备用·现场问答」加到了稿子末尾——它不进正文，现场卡住时才看。',
+      action: {
+        label: '加进稿子末尾',
+        draft: `${draft.trimEnd()}\n\n【备用·现场问答】\n${qaBlock(p, packet, points)}`,
+      },
     }
   }
 
@@ -1301,38 +1334,51 @@ export async function generateDraft({ profile, materials, extra = '', settings, 
   return result
 }
 
-export async function chatReply({ profile, materials, messages, draft, settings, onToken, onReasoning, signal }) {
-  const last = [...messages].reverse().find((m) => m.role === 'user')
-  const message = last?.content || ''
+/**
+ * 按一句要求改稿：远程模型改文本，失败或未配置时用本地规则引擎。
+ * 返回 { text, note, mode }；text 为 null 表示这条要求没有改动正文（例如「素材里没有数字」）。
+ */
+export async function editByInstruction({
+  profile,
+  materials,
+  draft,
+  instruction,
+  settings,
+  onToken,
+  onReasoning,
+  signal,
+}) {
+  const source = (draft || '').trim()
+  if (!source) throw new Error('先有稿子，才能按你的要求改')
 
   if (remoteReady(settings)) {
     try {
-      const packet = buildContextPacket(profile, materials)
-      const system = `${packetToSystemPrompt(packet)}\n\n【当前讲稿】\n${draft || '（还没有稿子）'}\n\n【对话规则】\n- 用户在和你多轮打磨这篇${packet.family.name}讲稿。回答要短，先给判断再给改法。\n- 如果用户要求改稿，直接给出修改后的相关段落，不要输出整篇（除非用户要求）。\n- 不要编造数据。`
-      const history = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }))
-      const text = await callChat({ settings, system, messages: history, onToken, onReasoning, signal })
-      return { content: text.trim() || '模型没有返回内容，请重试。', action: null, mode: 'remote' }
+      const text = await reviseRemote({
+        profile,
+        materials,
+        source,
+        instruction,
+        settings,
+        onToken,
+        onReasoning,
+        signal,
+      })
+      if (!text.trim()) throw new Error('模型没有返回内容')
+      return { text: text.trim(), note: '', mode: 'remote' }
     } catch (err) {
       if (err?.name === 'AbortError') throw err
-      const local = localChatReply({ draft, profile, materials, message })
+      const local = localInstructionEdit({ draft: source, profile, materials, instruction })
       return {
-        ...local,
-        content: `（远程模型不可用，以下由本地引擎回答）\n\n${local.content}`,
+        text: local.action?.draft || null,
+        note: `（远程模型不可用，改用本地引擎）\n\n${local.content}`,
         mode: 'local',
         warning: err?.message || '',
       }
     }
   }
 
-  const reply = localChatReply({ draft, profile, materials, message })
-  if (onToken) {
-    const chunks = reply.content.match(/[\s\S]{1,12}/g) || []
-    for (let i = 0; i < chunks.length; i += 1) {
-      onToken(chunks[i], chunks.slice(0, i + 1).join(''))
-      if (i % 8 === 0) await new Promise((resolve) => setTimeout(resolve, 6))
-    }
-  }
-  return { ...reply, mode: 'local' }
+  const local = localInstructionEdit({ draft: source, profile, materials, instruction })
+  return { text: local.action?.draft || null, note: local.content, mode: 'local' }
 }
 
 export function materialKeywords(materials = []) {

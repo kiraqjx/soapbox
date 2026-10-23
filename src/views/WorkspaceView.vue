@@ -4,24 +4,20 @@ import { RouterLink, useRouter } from 'vue-router'
 import {
   activeProfile,
   addMaterials,
-  clearChat,
   clearMaterials,
-  pushChat,
   removeMaterial,
   remoteReady as remoteConfigured,
   setDraft,
   state,
-  updateChatMessage,
   updateMaterial,
   draftStats,
 } from '../stores/workspace'
 import { parseFiles, humanSize } from '../services/parser'
-import { chatReply, generateDraft } from '../services/ai'
-import { addressOf, profileSummary } from '../services/context'
+import { generateDraft } from '../services/ai'
+import { addressOf } from '../services/context'
 import { charsPerMinute, familyOf, familyName } from '../services/scenes'
 import { countChars, truncate } from '../services/text'
 import FileDrop from '../components/FileDrop.vue'
-import ChatPanel from '../components/ChatPanel.vue'
 import ModelTrace from '../components/ModelTrace.vue'
 import ParseDebug from '../components/ParseDebug.vue'
 import ProfileSwitcher from '../components/ProfileSwitcher.vue'
@@ -33,7 +29,6 @@ const router = useRouter()
 
 const parsing = ref(false)
 const genBusy = ref(false)
-const chatBusy = ref(false)
 const mode = ref(remoteConfigured.value ? 'remote' : 'local')
 const extra = ref('')
 const transcripts = reactive({})
@@ -60,6 +55,13 @@ const usableChars = computed(() =>
   state.materials.reduce((sum, m) => sum + countChars(m.text || ''), 0),
 )
 const parsedCount = computed(() => state.materials.filter((m) => m.text && m.status === 'parsed').length)
+const roundCount = computed(() => (state.revision.rounds || []).length)
+const recentRounds = computed(() => (state.revision.rounds || []).slice(-3).reverse())
+// 改稿对照里改的就是这份草稿吗（稿子本身，或已经写回来的那一版）
+const revisingThisDraft = computed(() => {
+  if (!roundCount.value || !state.draft.trim()) return false
+  return state.revision.source === state.draft || state.revision.revised === state.draft
+})
 
 async function handleFiles(files) {
   parsing.value = true
@@ -154,12 +156,6 @@ async function generate() {
     setDraft(result.text)
     mode.value = result.mode
     if (useRemote) finishTrace(result.text, result.mode)
-    if (!state.chat.length) {
-      pushChat({
-        role: 'assistant',
-        content: `稿子按「${profileSummary(activeProfile.value)}」起好了。\n带（待补充）的地方留给你，数字和名字写真实的最有底气。\n想改哪里直接说，比如「再短一点」或「开场更直接」。`,
-      })
-    }
     toast(result.mode === 'remote' ? '模型写好了' : '本地引擎写好了')
   } catch (err) {
     if (err?.name === 'AbortError') {
@@ -192,48 +188,6 @@ function stop() {
   controller?.abort()
 }
 
-async function send(message) {
-  chatBusy.value = true
-  pushChat({ role: 'user', content: message })
-  const assistant = pushChat({ role: 'assistant', content: '', streaming: true })
-  let reasoningText = ''
-  try {
-    const reply = await chatReply({
-      profile: activeProfile.value,
-      materials: state.materials,
-      draft: state.draft,
-      messages: state.chat.filter((m) => !m.streaming).map((m) => ({ role: m.role, content: m.content })),
-      settings: state.settings,
-      onToken: (_chunk, full) => updateChatMessage(assistant.id, { content: full }),
-      onReasoning: (_delta, full) => {
-        reasoningText = full
-        updateChatMessage(assistant.id, { reasoning: full })
-      },
-    })
-    updateChatMessage(assistant.id, {
-      content: reply.content,
-      streaming: false,
-      action: reply.action || null,
-      reasoning: reasoningText,
-    })
-    mode.value = reply.mode || mode.value
-  } catch (err) {
-    updateChatMessage(assistant.id, {
-      content: `这次没答上来：${err?.message || '未知错误'}。可以在「模型」页检查接口配置。`,
-      streaming: false,
-      error: true,
-    })
-  } finally {
-    chatBusy.value = false
-  }
-}
-
-function applyAction(msg) {
-  if (!msg.action?.draft) return
-  setDraft(msg.action.draft)
-  toast('已替换为对话里的版本')
-}
-
 async function copyDraft() {
   if (!state.draft.trim()) return
   try {
@@ -249,13 +203,20 @@ function sendToRevise() {
     toast('先写出一版，才好动手改')
     return
   }
-  state.revision = {
+  // 稿子没变（或就是刚写回来的那一版）就保留改稿对照的轮次，别清掉
+  const same = state.revision.source === state.draft || state.revision.revised === state.draft
+  const next = {
     source: state.draft,
-    revised: '',
-    issues: [],
-    appliedIds: [],
+    revised: same ? state.revision.revised || '' : '',
+    issues: same ? state.revision.issues || [] : [],
+    appliedIds: same ? state.revision.appliedIds || [] : [],
+    analyzedSource: same ? state.revision.analyzedSource || '' : '',
+    rounds: same ? state.revision.rounds || [] : [],
+    remaining: same ? state.revision.remaining || [] : [],
+    mode: state.revision.mode,
     score: null,
   }
+  Object.assign(state.revision, next)
   router.push('/revise')
 }
 
@@ -288,21 +249,22 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="two-col two-col--wide-right">
+    <div class="two-col">
       <div class="stack">
         <section class="card" data-tour="workspace-materials">
           <div class="card__head">
             <div class="card__title">素材</div>
-            <div class="row" style="gap: 10px">
-              <span class="badge">{{ state.materials.length }} 份 · 可读 {{ usableChars }} 字</span>
-              <button class="btn-link" @click="addSample">载入示例</button>
-              <button v-if="state.materials.length" class="btn-link btn-link--danger" @click="clearMaterials()">
-                清空
-              </button>
-            </div>
+            <span class="badge">{{ state.materials.length }} 份 · 可读 {{ usableChars }} 字</span>
           </div>
 
           <FileDrop :busy="parsing" @files="handleFiles" />
+
+          <div class="row row--wrap" style="margin-top: 10px">
+            <button class="btn-link" @click="addSample">载入示例</button>
+            <button v-if="state.materials.length" class="btn-link btn-link--danger" @click="clearMaterials()">
+              清空
+            </button>
+          </div>
 
           <div v-if="state.materials.length" style="margin-top: 14px">
             <div v-for="m in state.materials" :key="m.id" class="material">
@@ -351,7 +313,7 @@ onBeforeUnmount(() => {
         <section class="card" data-tour="workspace-generate">
           <div class="card__head">
             <div class="card__title">生成设置</div>
-            <span class="badge">{{ familyLabel }} · 目标 {{ target }} 字 · {{ activeProfile?.duration || 5 }} 分钟</span>
+            <span class="badge">{{ familyLabel }} · 目标 {{ target }} 字</span>
           </div>
 
           <div class="stack" style="gap: 12px">
@@ -360,8 +322,8 @@ onBeforeUnmount(() => {
               <textarea
                 v-model="extra"
                 class="textarea"
-                style="min-height: 74px"
-                placeholder="例如：重点讲支付链路的风险；用一个客户故事开场；结尾要一句能被转述的话"
+                style="min-height: 96px; font-size: 13px"
+                placeholder="例如：重点讲支付链路的风险；开场用一个客户故事；结尾要一句能被转述的话"
               ></textarea>
             </label>
 
@@ -371,15 +333,32 @@ onBeforeUnmount(() => {
                 {{ genBusy ? '正在写' : state.draft ? '再写一版' : '开始写稿' }}
               </button>
               <button v-if="genBusy" class="btn btn--ghost" @click="stop">停止</button>
-              <span class="tiny muted">
-                {{ parsedCount ? `会读 ${parsedCount} 份素材` : '没有素材也能先搭一版骨架' }}
-              </span>
             </div>
+
+            <span class="tiny muted">
+              {{ parsedCount ? `会读 ${parsedCount} 份素材` : '没有素材也能先搭一版骨架' }}
+            </span>
 
             <ModelTrace v-if="trace.visible" :trace="trace" title="模型生成过程" />
           </div>
         </section>
 
+        <section v-if="activeProfile" class="card card--tight">
+          <div class="card__title" style="font-size: 14px">当前上下文</div>
+          <p class="small muted" style="margin: 8px 0 0; line-height: 1.85">
+            场景：{{ familyLabel }} · {{ activeProfile.sceneType }} · {{ activeProfile.duration }} 分钟<br />
+            对象：{{ activeProfile.audienceType }}（称呼「{{ addressOf(activeProfile) }}」）<br />
+            风格：{{ activeProfile.tone }} · 诉求：{{ activeProfile.goal }}<br />
+            <span v-if="activeProfile.occasion">场合：{{ activeProfile.occasion }} · </span>
+            互动：{{ activeProfile.interaction || '不设互动' }}
+          </p>
+          <RouterLink to="/profiles" class="btn-link" style="display: inline-block; margin-top: 8px">
+            调整档案 →
+          </RouterLink>
+        </section>
+      </div>
+
+      <div class="stack">
         <section class="card" data-tour="workspace-draft">
           <div class="card__head">
             <div class="card__title">讲稿</div>
@@ -395,53 +374,54 @@ onBeforeUnmount(() => {
           <textarea
             v-model="state.draft"
             class="textarea textarea--draft"
-            placeholder="生成的讲稿会出现在这里，也可以直接把你的旧稿粘进来，再送去「改稿对照」逐句诊断。"
+            placeholder="生成的讲稿会出现在这里，也可以直接把你的旧稿粘进来，再去「改稿对照」按句子诊断和打磨。"
           ></textarea>
 
           <p v-if="state.draft.trim() && draftStats.chars < target * 0.65" class="field__hint" style="margin: 8px 0 0">
-            现在 {{ draftStats.chars }} 字，离 {{ target }} 字还差一点。可以对右边说「展开要点」，或者补两段你亲历的小事。
+            现在 {{ draftStats.chars }} 字，离 {{ target }} 字还差一点。可以带着稿子去改稿对照，说一句「展开要点」，或者补两段你亲历的小事。
           </p>
 
           <div class="row row--wrap" style="margin-top: 12px">
-            <button class="btn btn--teal" @click="sendToRevise">送去逐句改稿 →</button>
+            <button class="btn btn--teal" @click="sendToRevise">去改稿对照 →</button>
             <button class="btn btn--ghost" :disabled="!state.draft.trim()" @click="copyDraft">复制全文</button>
             <button class="btn-link btn-link--danger" style="margin-left: auto" @click="clearDraft">清空草稿</button>
           </div>
 
           <p class="field__hint" style="margin: 10px 0 0">
-            稿子可以直接改。念一遍，卡住的地方就是要修的地方；拿不准的句子，丢给右边的对话就好。
+            稿子可以直接改。念一遍，卡住的地方就是要修的地方；想按一句话改一遍，去改稿对照说一句就行。
           </p>
         </section>
-      </div>
 
-      <aside class="sticky-col">
-        <div class="card" data-tour="workspace-chat" style="display: flex; flex-direction: column; gap: 2px">
-          <ChatPanel
-            :messages="state.chat"
-            :busy="chatBusy"
-            :mode="mode"
-            :disabled="genBusy"
-            :family="family"
-            @send="send"
-            @apply="applyAction"
-            @clear="clearChat()"
-          />
-        </div>
+        <section class="card" data-tour="workspace-polish">
+          <div class="card__head">
+            <div class="card__title">打磨</div>
+            <span v-if="roundCount" class="badge" :class="revisingThisDraft ? 'badge--teal' : ''">
+              {{ revisingThisDraft ? `已改 ${roundCount} 轮` : '改稿对照里有别的稿子' }}
+            </span>
+          </div>
 
-        <div v-if="activeProfile" class="card card--tight" style="margin-top: 14px">
-          <div class="card__title" style="font-size: 14px">当前上下文</div>
-          <p class="small muted" style="margin: 8px 0 0; line-height: 1.85">
-            场景：{{ familyLabel }} · {{ activeProfile.sceneType }} · {{ activeProfile.duration }} 分钟<br />
-            对象：{{ activeProfile.audienceType }}（称呼「{{ addressOf(activeProfile) }}」）<br />
-            风格：{{ activeProfile.tone }} · 诉求：{{ activeProfile.goal }}<br />
-            <span v-if="activeProfile.occasion">场合：{{ activeProfile.occasion }} · </span>
-            互动：{{ activeProfile.interaction || '不设互动' }}
+          <p class="small muted" style="margin: 0">
+            改稿不在这一页做。到「改稿对照」：左边是你的稿子，右边一句要求改一处，改完立刻给前后差异，不满意就撤销。
           </p>
-          <RouterLink to="/profiles" class="btn-link" style="display: inline-block; margin-top: 8px">
-            调整档案 →
-          </RouterLink>
-        </div>
-      </aside>
+
+          <div v-if="revisingThisDraft" style="margin-top: 12px">
+            <div class="field__label">最近改动</div>
+            <div v-for="r in recentRounds" :key="r.id" class="material" style="padding: 8px 10px">
+              <div class="small">{{ r.instruction }}</div>
+              <div class="tiny muted" style="margin-top: 4px">
+                {{ countChars(r.before) }} → {{ countChars(r.after) }} 字
+              </div>
+            </div>
+            <p class="tiny muted" style="margin: 8px 0 0">
+              改好的版本在改稿对照里，点「写回工作台草稿」才会覆盖上面的讲稿。
+            </p>
+          </div>
+
+          <div class="row row--wrap" style="margin-top: 12px">
+            <button class="btn" :disabled="!state.draft.trim()" @click="sendToRevise">带着这版去打磨 →</button>
+          </div>
+        </section>
+      </div>
     </div>
   </main>
 </template>
