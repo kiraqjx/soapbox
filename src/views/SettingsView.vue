@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { exportWorkspace, resetAll, state } from '../stores/workspace'
+import { exportWorkspace, remoteReady, resetAll, state } from '../stores/workspace'
 import { testConnection } from '../services/ai'
+import { PROVIDERS, providerOf } from '../services/providers'
 import { toast } from '../composables/useToast'
 
 const testing = ref(false)
@@ -10,16 +11,34 @@ const testResult = ref(null)
 const EMAIL = '2631133172@qq.com'
 const GITHUB = 'https://github.com/kiraqjx/soapbox'
 
+const current = computed(() => providerOf(state.settings.provider))
 const mixedContent = computed(
   () =>
     typeof window !== 'undefined' &&
     window.location.protocol === 'https:' &&
-    /^http:\/\//.test(state.settings.baseUrl || ''),
+    /^http:\/\//.test(current.value.baseUrl || ''),
 )
 
+function selectProvider(id) {
+  const p = providerOf(id)
+  const wasPreset = /api\.deepseek\.com|api\.anthropic\.com/.test(state.settings.baseUrl || '') || !state.settings.baseUrl
+  state.settings.provider = p.id
+  testResult.value = null
+  if (p.id === 'custom') {
+    // 从预设切回来时给一个能直接用的起点，自己填过地址的不动
+    if (wasPreset) {
+      state.settings.baseUrl = p.baseUrl
+      state.settings.model = p.model
+    }
+    return
+  }
+  state.settings.baseUrl = p.baseUrl
+  state.settings.model = p.model
+}
+
 async function test() {
-  if (!state.settings.baseUrl || !state.settings.apiKey) {
-    toast('先填一下接口地址和 Key')
+  if (!state.settings.apiKey) {
+    toast('先填一下 API Key')
     return
   }
   testing.value = true
@@ -56,45 +75,97 @@ function reset() {
     <div class="page-head">
       <div>
         <h1>模型与数据</h1>
-        <p>不接模型也能用。接上你自己的模型，语气会更像你；文件解析一直在这台电脑上完成。</p>
+        <p>不接模型也能用。接 DeepSeek 或 Claude 只要填一个 Key，地址和模型名都已内置；文件解析一直在这台电脑上完成。</p>
       </div>
-      <span class="badge" :class="state.settings.useRemote && state.settings.apiKey ? 'badge--teal' : ''">
-        {{ state.settings.useRemote && state.settings.apiKey ? '远程模型已启用' : '本地引擎运行中' }}
+      <span class="badge" :class="remoteReady ? 'badge--teal' : ''">
+        {{ remoteReady ? '远程模型已启用' : '本地引擎运行中' }}
       </span>
     </div>
 
     <div class="stack">
       <section class="card" data-tour="settings-model">
         <div class="card__head">
-          <div class="card__title">OpenAI 兼容接口</div>
+          <div class="card__title">模型服务</div>
           <span class="badge">配置保存在本机浏览器</span>
         </div>
 
-        <div class="stack" style="gap: 16px">
-          <label class="field">
-            <span class="field__label">接口地址 Base URL</span>
-            <input v-model="state.settings.baseUrl" class="input mono" placeholder="https://api.openai.com/v1" />
-            <span class="field__hint">
-              本地模型可填 <span class="mono">http://localhost:11434/v1</span>（Ollama）或
-              <span class="mono">http://localhost:1234/v1</span>（LM Studio）。需允许跨域访问。
-            </span>
-          </label>
+        <div class="chip-group">
+          <button
+            v-for="p in PROVIDERS"
+            :key="p.id"
+            class="chip"
+            :class="{ 'is-on': state.settings.provider === p.id }"
+            @click="selectProvider(p.id)"
+          >
+            {{ p.name }}
+          </button>
+        </div>
+
+        <p class="small muted" style="margin: 12px 0 0; line-height: 1.9">{{ current.blurb }}</p>
+
+        <div v-if="current.id === 'deepseek'" class="callout">
+          <b>只填一个 Key 就行。</b>{{ current.steps }}
+          <a :href="current.keyUrl" target="_blank" rel="noopener">去拿 Key ↗</a>
+        </div>
+        <div v-else-if="current.id === 'anthropic'" class="callout">
+          <div>{{ current.steps }}<a :href="current.keyUrl" target="_blank" rel="noopener">去拿 Key ↗</a></div>
+          <div style="margin-top: 6px">{{ current.note }}</div>
+        </div>
+
+        <div class="stack" style="gap: 16px; margin-top: 16px">
+          <div v-if="current.id !== 'custom'" class="field">
+            <span class="field__label">接口地址</span>
+            <div class="mono small" style="padding: 9px 12px; border: 2px dashed var(--line); background: var(--paper-4)">
+              {{ current.baseUrl }}
+            </div>
+            <span class="field__hint">已内置，不用自己填。要换成中转地址请选「自定义 / 本地」。</span>
+          </div>
 
           <div class="grid-2">
             <label class="field">
               <span class="field__label">API Key</span>
-              <input v-model="state.settings.apiKey" class="input mono" type="password" placeholder="sk-..." />
-              <span class="field__hint">只存在 localStorage，不经任何服务器中转。</span>
+              <input v-model="state.settings.apiKey" class="input mono" type="password" :placeholder="current.keyHint" />
+              <span class="field__hint">
+                只存在 localStorage，不经任何服务器中转。
+                <a v-if="current.keyUrl" :href="current.keyUrl" target="_blank" rel="noopener">创建 Key ↗</a>
+              </span>
             </label>
             <label class="field">
               <span class="field__label">模型名称</span>
-              <input v-model="state.settings.model" class="input mono" placeholder="gpt-4o-mini / qwen2.5:14b" />
-              <span class="field__hint">
-                挑一个中文长文本顺手、上下文 ≥ 32k 的模型会更稳。生成过程能实时看到；
-                思考过程要看厂商给不给，<span class="mono">DeepSeek Reasoner</span> 这类会返回
-                <span class="mono">reasoning_content</span>。
+              <input
+                v-model="state.settings.model"
+                class="input mono"
+                :list="`model-options-${current.id}`"
+                :placeholder="current.model"
+              />
+              <datalist :id="`model-options-${current.id}`">
+                <option v-for="m in current.models" :key="m" :value="m" />
+              </datalist>
+              <span v-if="current.id === 'deepseek'" class="field__hint">
+                <span class="mono">deepseek-flash</span> 又快又便宜，日常够用；
+                <span class="mono">deepseek-v4-pro</span> 更强，长稿和复杂结构更稳，也贵一些。
               </span>
+              <span v-else-if="current.id === 'anthropic'" class="field__hint">
+                填控制台里的模型 ID，不确定就用默认的 <span class="mono">{{ current.model }}</span>。
+              </span>
+              <span v-else class="field__hint">挑一个中文长文本顺手、上下文 ≥ 32k 的模型会更稳。</span>
             </label>
+          </div>
+
+          <label v-if="current.id === 'custom'" class="field">
+            <span class="field__label">接口地址 Base URL</span>
+            <input v-model="state.settings.baseUrl" class="input mono" placeholder="https://api.openai.com/v1" />
+            <span class="field__hint">{{ current.note }}</span>
+          </label>
+
+          <div v-if="current.topUpUrl" class="row row--wrap" style="gap: 12px">
+            <a class="btn btn--ghost btn--sm" :href="current.topUpUrl" target="_blank" rel="noopener">
+              去 {{ current.name }} 充值 ↗
+            </a>
+            <a v-if="current.docsUrl" class="btn-link" :href="current.docsUrl" target="_blank" rel="noopener">
+              接口文档 →
+            </a>
+            <span class="tiny muted">按用量扣费，余额不足时请求会直接失败。</span>
           </div>
 
           <label class="row" style="gap: 8px; cursor: pointer">

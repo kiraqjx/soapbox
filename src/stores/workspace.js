@@ -6,6 +6,7 @@ import {
   SCENE_FAMILIES,
   familyOf,
 } from '../services/scenes.js'
+import { normalizeSettings, remoteReady as settingsRemoteReady } from '../services/providers.js'
 
 // 存储键沿用旧名：改名会让已有用户的档案、素材与草稿全部丢失
 const STORAGE_KEY = 'chenqing.workspace.v1'
@@ -142,22 +143,15 @@ export const state = reactive({
   draft: typeof saved?.draft === 'string' ? saved.draft : '',
   chat: Array.isArray(saved?.chat) ? saved.chat : [],
   revision: saved?.revision || { source: '', revised: '', issues: [], appliedIds: [] },
-  settings: {
-    baseUrl: 'https://api.openai.com/v1',
-    apiKey: '',
-    model: 'gpt-4o-mini',
-    useRemote: false,
-    ...(saved?.settings || {}),
-  },
+  // 新用户默认 DeepSeek：地址与模型已内置，只需要填一个 Key
+  settings: normalizeSettings(saved?.settings),
 })
 
 export const activeProfile = computed(
   () => state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0] || null,
 )
 
-export const remoteReady = computed(
-  () => !!(state.settings.useRemote && state.settings.apiKey && state.settings.baseUrl && state.settings.model),
-)
+export const remoteReady = computed(() => settingsRemoteReady(state.settings))
 
 export const draftStats = computed(() => {
   const text = state.draft || ''
@@ -258,12 +252,7 @@ export function resetAll() {
   state.draft = ''
   state.chat = []
   state.revision = { source: '', revised: '', issues: [], appliedIds: [] }
-  state.settings = {
-    baseUrl: 'https://api.openai.com/v1',
-    apiKey: '',
-    model: 'gpt-4o-mini',
-    useRemote: false,
-  }
+  state.settings = normalizeSettings()
 }
 
 export function exportWorkspace() {

@@ -91,7 +91,7 @@ onBeforeUnmount(() => cancelAnimationFrame(rafId))
       </p>
       <p v-else class="field__hint" style="margin: 6px 0 0">
         这次没收到它的思考过程。多数模型只交最终答案，不把心里话说出来；换成
-        <span class="mono">DeepSeek Reasoner</span> 这类会返回
+        <span class="mono">deepseek-v4-pro</span> 这类会返回
         <span class="mono">reasoning_content</span> 的模型，就能看见它的小声嘀咕。
       </p>
     </div>

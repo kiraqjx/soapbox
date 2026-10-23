@@ -86,7 +86,7 @@ export const TOUR_STEPS = [
   {
     key: 'settings-model',
     title: '想让语气更像你，再接模型',
-    body: '支持 OpenAI 兼容接口，不接也完全能用。档案、素材、草稿都只存在这台电脑的浏览器里。',
+    body: '选 DeepSeek 或 Claude，只要填一个 API Key——接口地址、模型名都内置好了，页面上还有充值和拿 Key 的入口。不接也完全能用，档案、素材、草稿都只存在这台电脑的浏览器里。',
     route: '/settings',
     target: '[data-tour="settings-model"]',
     placement: 'bottom',

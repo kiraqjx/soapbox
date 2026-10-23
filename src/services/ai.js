@@ -27,11 +27,12 @@ import {
   familyName,
 } from './scenes.js'
 import { countChars, dedupe, splitParagraphs, splitSentences, truncate } from './text.js'
+import { resolveSettings, remoteReady as settingsRemoteReady } from './providers.js'
 
 export { autoPolish, buildRevision, diagnose, applyFixes, applySelectedIssues }
 
 export function remoteReady(settings) {
-  return !!(settings?.useRemote && settings?.apiKey && settings?.baseUrl && settings?.model)
+  return settingsRemoteReady(settings)
 }
 
 /* ============================ 远程模型 ============================ */
@@ -56,9 +57,18 @@ function pickReasoning(obj) {
 }
 
 export async function callChat({ settings, system, messages, onToken, onReasoning, signal }) {
-  const base = String(settings.baseUrl || '').replace(/\/+$/, '')
-  if (!base) throw new Error('尚未配置模型地址')
-  const res = await fetch(`${base}/chat/completions`, {
+  const s = resolveSettings(settings)
+  if (!s.baseUrl) throw new Error('尚未配置模型地址')
+  if (!s.apiKey) throw new Error('还没有填 API Key')
+  if (s.kind === 'anthropic') {
+    return callAnthropic({ settings: s, system, messages, onToken, onReasoning, signal })
+  }
+  return callOpenAICompatible({ settings: s, system, messages, onToken, onReasoning, signal })
+}
+
+/** OpenAI 兼容：OpenAI 官方、DeepSeek、中转站、Ollama / LM Studio */
+async function callOpenAICompatible({ settings, system, messages, onToken, onReasoning, signal }) {
+  const res = await fetch(`${settings.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -133,16 +143,127 @@ export async function callChat({ settings, system, messages, onToken, onReasonin
   return full
 }
 
-export async function testConnection(settings) {
-  const base = String(settings.baseUrl || '').replace(/\/+$/, '')
-  const res = await fetch(`${base}/models`, {
-    headers: { Authorization: `Bearer ${settings.apiKey}` },
+/**
+ * Anthropic Messages API：system 是顶层参数，鉴权用 x-api-key，
+ * 浏览器直连要显式声明 anthropic-dangerous-direct-browser-access。
+ */
+async function callAnthropic({ settings, system, messages, onToken, onReasoning, signal }) {
+  const res = await fetch(`${settings.baseUrl}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': settings.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: settings.model,
+      max_tokens: 8192,
+      temperature: 0.7,
+      stream: true,
+      system,
+      messages: messages.map((m) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: String(m.content ?? ''),
+      })),
+    }),
+    signal: timeoutSignal(signal),
   })
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    const hint = /request not allowed/i.test(detail)
+      ? '（多半是地区/网络限制：Claude 官方接口在中国大陆通常无法直连，可换中转地址并改用「自定义 / 本地」）'
+      : ''
+    throw new Error(`Claude 接口返回 ${res.status}${hint}${detail ? `：${detail.slice(0, 200)}` : ''}`)
+  }
+
+  const contentType = res.headers.get('content-type') || ''
+  if (contentType.includes('application/json')) {
+    const data = await res.json()
+    const blocks = Array.isArray(data?.content) ? data.content : []
+    const content = blocks.filter((b) => b.type === 'text').map((b) => b.text || '').join('')
+    const think = blocks.filter((b) => b.type === 'thinking').map((b) => b.thinking || '').join('')
+    if (think) onReasoning?.(think, think)
+    if (content) onToken?.(content, content)
+    return content
+  }
+
+  if (!res.body) {
+    const text = await res.text()
+    onToken?.(text, text)
+    return text
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let full = ''
+  let thinkFull = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const raw of lines) {
+      const line = raw.trim()
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (!payload || payload === '[DONE]') continue
+      let json = null
+      try {
+        json = JSON.parse(payload)
+      } catch {
+        continue
+      }
+      if (json.type === 'error') {
+        throw new Error(json.error?.message || 'Claude 返回了错误')
+      }
+      if (json.type !== 'content_block_delta') continue
+      const delta = json.delta || {}
+      if (delta.type === 'thinking_delta' && delta.thinking) {
+        thinkFull += delta.thinking
+        onReasoning?.(delta.thinking, thinkFull)
+      } else if (delta.type === 'text_delta' && delta.text) {
+        full += delta.text
+        onToken?.(delta.text, full)
+      }
+    }
+  }
+  return full
+}
+
+export async function testConnection(settings) {
+  const s = resolveSettings(settings)
+  if (!s.baseUrl) return { ok: false, message: '还没有选服务商' }
+  if (!s.apiKey) return { ok: false, message: '先填 API Key' }
+
+  const headers =
+    s.kind === 'anthropic'
+      ? {
+          'x-api-key': s.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        }
+      : { Authorization: `Bearer ${s.apiKey}` }
+
+  const res = await fetch(`${s.baseUrl}/models`, { headers })
   if (res.ok) return { ok: true, message: '连接正常，模型列表可读取' }
   if (res.status === 404) {
     return { ok: true, message: '接口可达（该服务未提供 /models，将以实际生成结果为准）' }
   }
   const detail = await res.text().catch(() => '')
+  if (/request not allowed/i.test(detail)) {
+    return {
+      ok: false,
+      message: '被拒绝了（403 Request not allowed）：多半是地区或网络限制，试试代理，或换成中转地址',
+    }
+  }
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, message: `Key 没通过校验（${res.status}），确认填的是这个服务商的 Key` }
+  }
   return { ok: false, message: `连接失败 ${res.status}${detail ? `：${detail.slice(0, 120)}` : ''}` }
 }
 
