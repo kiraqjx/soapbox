@@ -127,7 +127,8 @@ function reset() {
               <input v-model="state.settings.apiKey" class="input mono" type="password" :placeholder="current.keyHint" />
               <span class="field__hint">
                 只存在 localStorage，不经任何服务器中转。
-                <a v-if="current.keyUrl" :href="current.keyUrl" target="_blank" rel="noopener">创建 Key ↗</a>
+                <a v-if="current.keyUrl" :href="current.keyUrl" target="_blank" rel="noopener">创建 Key ↗</a><br />
+                保管责任在你，泄露风险见下方「API Key 与账号安全」。
               </span>
             </label>
             <label class="field">
@@ -220,6 +221,45 @@ function reset() {
           <button class="btn btn--ghost" @click="exportData">导出全部数据</button>
           <button class="btn-link btn-link--danger" @click="reset">清空本地数据</button>
           <span class="tiny muted">偶尔导出一份备份吧，清浏览器缓存时会把这些一起带走。</span>
+        </div>
+      </section>
+
+      <section id="key-safety" class="card">
+        <div class="card__head">
+          <div class="card__title">API Key 与账号安全</div>
+          <span class="badge">填 Key 之前请先读这段</span>
+        </div>
+
+        <p class="small muted" style="margin: 0; line-height: 1.95">
+          肥皂箱是纯前端页面：没有后端服务器、没有账号体系、没有中转。你填的 API Key 只会写进这台电脑浏览器的
+          localStorage，请求由浏览器直接发往你选的服务商。我们不经手，也无处留存。
+        </p>
+
+        <div class="grid-2" style="margin-top: 16px">
+          <div>
+            <h3 class="serif" style="font-size: 15px; margin-bottom: 6px">Key 可能从哪儿漏出去</h3>
+            <ul class="small muted" style="margin: 0; padding-left: 18px; line-height: 1.95">
+              <li>公用电脑、共享浏览器配置，或别人也能登的账号</li>
+              <li>浏览器扩展、脚本、书签工具读取页面内容</li>
+              <li>录屏、直播、截图、远程协助时露出输入框</li>
+              <li>把 Key 贴进聊天工具、文档，或提交进代码仓库</li>
+              <li>代理与抓包工具，以及第三方中转服务自己的日志</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="serif" style="font-size: 15px; margin-bottom: 6px">四件能替你兜底的事</h3>
+            <ul class="small muted" style="margin: 0; padding-left: 18px; line-height: 1.95">
+              <li>单独建一个只给这个工具用的 Key，别用主 Key</li>
+              <li>在服务商后台设额度上限，用完随时吊销、重建</li>
+              <li>不在公用电脑上保存，离开前清掉浏览器数据</li>
+              <li>怀疑泄露就先禁用旧 Key，再去账单核对用量</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout" style="margin-top: 16px">
+          <b>责任划分：</b>Key 的保管与使用由你自己负责。因你的设备、账号、浏览器环境、网络代理、第三方服务或误操作导致
+          Key 泄露、被盗用，以及由此产生的调用费用与任何损失，本站作者不承担赔偿或其他责任；我们能承诺的是：不收集、不上传、不代为存储。
         </div>
       </section>
 

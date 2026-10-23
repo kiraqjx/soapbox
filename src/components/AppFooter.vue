@@ -21,6 +21,11 @@ const GITHUB = 'https://github.com/kiraqjx/soapbox'
     </div>
 
     <div class="site-footer__contact">
+      <span class="site-footer__contact-tag">安全提示</span>
+      <span>本站没有服务器，不收集任何数据；API Key 只存在你的浏览器里，由你自行保管，泄露风险与后果自负。</span>
+    </div>
+
+    <div class="site-footer__contact">
       <span class="site-footer__contact-tag">催更 / 建议</span>
       <span>想要什么功能，直接跟我说：</span>
       <a :href="`mailto:${EMAIL}`">{{ EMAIL }}</a>

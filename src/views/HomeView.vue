@@ -171,7 +171,7 @@ const capabilities = [
       <div class="card card--tight">
         <div class="card__title">想接模型也随时可以</div>
         <p class="small muted" style="margin: 8px 0 0">
-          不填 Key 也能用，本地规则引擎先顶着；填了就走你自己的接口。
+          不填 Key 也能用，本地规则引擎先顶着；填了就走你自己的接口。Key 只存在这台电脑，我们不经手，也请你自行保管。
         </p>
       </div>
       <div class="card card--tight">
