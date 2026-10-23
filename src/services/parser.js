@@ -1,13 +1,14 @@
 /**
  * 文件解析：docx / pptx / pdf / 纯文本 在浏览器本地完成。
- * - docx、pptx：JSZip 解包 + 解析 OOXML 里的文字（含表格、备注页不做处理）
- * - pdf：pdfjs-dist 逐页抽取文本层（扫描件无文本层时提示需 OCR）
+ * - docx、pptx：JSZip 解包 + 解析 OOXML 里的文字；pptx 额外读备注页与标题占位符，表格文字一并保留
+ * - pdf：pdfjs-dist 逐页抽取文本层，按坐标重建行与分栏、去掉跨页页眉页脚（扫描件无文本层时提示需 OCR）
  * - 音频 / 视频：浏览器内没有语音模型，标记为「待转写」，由用户粘贴转写稿或接入远程模型
  * - 图片：标记为参考图，供后续多模态模型使用
  */
 
 import JSZip from 'jszip'
 import { normalizeText } from './text.js'
+import { layoutPage, pagesToText, stripRunningHeads } from './pdfLayout.js'
 
 let seq = 0
 function uid(prefix = 'id') {
@@ -74,6 +75,53 @@ async function parseDocx(file) {
   return { text, meta: { paragraphs: paragraphs.length, source: 'docx' } }
 }
 
+const SHAPE_RE = /<p:sp(?:\s[^>]*)?>([\s\S]*?)<\/p:sp>/g
+
+function shapeBlocks(xml) {
+  return [...String(xml).matchAll(SHAPE_RE)].map((m) => m[1])
+}
+
+/** 占位符类型：title / ctrTitle 是标题，body 是正文，sldNum / ftr / dt 是页码与页脚 */
+function placeholderType(block) {
+  const tag = block.match(/<p:ph\b[^>]*>/)
+  if (!tag) return ''
+  const type = tag[0].match(/\btype="([^"]+)"/)
+  return type ? type[1] : 'body'
+}
+
+function resolveRelTarget(baseDir, target = '') {
+  if (!target) return ''
+  if (target.startsWith('/')) return target.slice(1)
+  const parts = baseDir.split('/').filter(Boolean)
+  for (const seg of target.split('/')) {
+    if (!seg || seg === '.') continue
+    if (seg === '..') parts.pop()
+    else parts.push(seg)
+  }
+  return parts.join('/')
+}
+
+/** 读某一页的备注页正文；只取 body 占位符，跳过页码、日期、页脚 */
+async function readSlideNotes(zip, slidePath) {
+  const relsPath = slidePath.replace(/([^/]+)$/, '_rels/$1.rels')
+  const relsFile = zip.file(relsPath)
+  if (!relsFile) return ''
+  const rels = await relsFile.async('string')
+  const target = rels.match(/Target="([^"]*notesSlide[^"]*\.xml)"/i)
+  if (!target) return ''
+  const notesFile = zip.file(resolveRelTarget('ppt/slides', target[1]))
+  if (!notesFile) return ''
+
+  const xml = await notesFile.async('string')
+  const runs = []
+  for (const block of shapeBlocks(xml)) {
+    const type = placeholderType(block)
+    if (type && type !== 'body') continue
+    runs.push(...xmlTextRuns(block, 'a:t').map((s) => s.trim()).filter(Boolean))
+  }
+  return normalizeText(runs.join('\n'))
+}
+
 async function parsePptx(file) {
   const zip = await JSZip.loadAsync(await file.arrayBuffer())
   const slideEntries = Object.keys(zip.files)
@@ -87,12 +135,28 @@ async function parsePptx(file) {
   if (!slideEntries.length) throw new Error('未找到幻灯片内容')
 
   const slides = []
+  const slideTitles = []
+  let noteCount = 0
   for (const name of slideEntries) {
     const xml = await zip.file(name).async('string')
-    const runs = xmlTextRuns(xml, 'a:t').map((s) => s.trim()).filter(Boolean)
     const slideNo = Number(name.match(/slide(\d+)\.xml$/)[1])
-    const body = runs.join('\n')
-    if (body) slides.push({ no: slideNo, text: body, titles: runs.filter((r) => r.length <= 40) })
+    // 正文取全部 a:t，顺带覆盖表格（graphicFrame）里的文字
+    const runs = xmlTextRuns(xml, 'a:t').map((s) => s.trim()).filter(Boolean)
+    const titleRuns = shapeBlocks(xml)
+      .filter((block) => ['title', 'ctrTitle'].includes(placeholderType(block)))
+      .flatMap((block) => xmlTextRuns(block, 'a:t').map((s) => s.trim()).filter(Boolean))
+
+    const notes = await readSlideNotes(zip, name)
+    if (notes) noteCount += 1
+    if (titleRuns.length) slideTitles.push(...titleRuns.slice(0, 2))
+    else slideTitles.push(...runs.filter((run) => run.length <= 40).slice(0, 2))
+
+    const parts = []
+    const body = normalizeText(runs.join('\n'))
+    if (body) parts.push(body)
+    if (notes) parts.push(`【备注】\n${notes}`)
+    const text = parts.join('\n\n')
+    if (text) slides.push({ no: slideNo, text })
   }
 
   const text = normalizeText(
@@ -102,7 +166,17 @@ async function parsePptx(file) {
 
   return {
     text,
-    meta: { pages: slides.length, slideTitles: slides.map((s) => s.titles.slice(0, 2)).flat() },
+    meta: {
+      pages: slideEntries.length,
+      withText: slides.length,
+      notes: noteCount,
+      slideTitles,
+      source: 'pptx',
+    },
+    note:
+      `已读取 ${slideEntries.length} 页幻灯片` +
+      (noteCount ? ` · 含备注 ${noteCount} 页` : '') +
+      (slides.length < slideEntries.length ? ` · ${slides.length} 页有文字` : ''),
   }
 }
 
@@ -122,32 +196,52 @@ async function getPdfjs() {
 async function parsePdf(file) {
   const pdfjs = await getPdfjs()
   const data = new Uint8Array(await file.arrayBuffer())
-  const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise
-  const pages = []
-  for (let i = 1; i <= doc.numPages; i += 1) {
-    const page = await doc.getPage(i)
-    const content = await page.getTextContent()
-    let line = ''
-    const lines = []
-    for (const item of content.items) {
-      if (typeof item.str !== 'string') continue
-      line += item.str
-      if (item.hasEOL) {
-        lines.push(line.trim())
-        line = ''
+  let doc
+  try {
+    doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise
+  } catch (err) {
+    if (err?.name === 'PasswordException') throw new Error('PDF 设置了打开密码，请先解除密码后再上传')
+    throw new Error('PDF 读取失败，文件可能已损坏或被加密')
+  }
+
+  const totalPages = doc.numPages
+  const layoutPages = []
+  let columns = 1
+  let skipped = 0
+  try {
+    for (let i = 1; i <= totalPages; i += 1) {
+      try {
+        const page = await doc.getPage(i)
+        const viewport = page.getViewport({ scale: 1 })
+        const content = await page.getTextContent()
+        const layout = layoutPage(content.items, { width: viewport.width, height: viewport.height })
+        columns = Math.max(columns, layout.columns)
+        layoutPages.push({ no: i, height: viewport.height, lines: layout.lines })
+        page.cleanup?.()
+      } catch {
+        // 单页坏了不影响其它页，最后在提示里说明
+        skipped += 1
       }
     }
-    if (line.trim()) lines.push(line.trim())
-    const body = normalizeText(lines.join('\n'))
-    if (body) pages.push({ no: i, text: body })
+  } finally {
+    await doc.destroy()
   }
-  await doc.destroy()
 
-  if (!pages.length) throw new Error('PDF 没有文字层（可能是扫描件），请改用 OCR 后的文档')
+  const { pages, removed } = stripRunningHeads(layoutPages)
+  const usable = pages.filter((page) => page.lines.length)
+  if (!usable.length) throw new Error('PDF 没有文字层（可能是扫描件），请改用 OCR 后的文档')
+
+  const noteParts = [
+    `已读取 ${usable.length}${totalPages > usable.length ? ` / ${totalPages}` : ''} 页文字`,
+  ]
+  if (columns > 1) noteParts.push(`识别 ${columns} 栏排版`)
+  if (removed) noteParts.push(`略过 ${removed} 行页眉页脚`)
+  if (skipped) noteParts.push(`${skipped} 页读取失败`)
 
   return {
-    text: normalizeText(pages.map((p) => `【第 ${p.no} 页】\n${p.text}`).join('\n\n')),
-    meta: { pages: pages.length, totalPages: doc.numPages, source: 'pdf' },
+    text: normalizeText(pagesToText(usable)),
+    meta: { pages: usable.length, totalPages, columns, removed, skipped, source: 'pdf' },
+    note: noteParts.join('，'),
   }
 }
 
@@ -185,12 +279,12 @@ export async function parseFile(file) {
       return { ...base, text, meta, note: `已读取 ${meta.paragraphs} 个段落` }
     }
     if (ext === 'pptx') {
-      const { text, meta } = await parsePptx(file)
-      return { ...base, text, meta, note: `已读取 ${meta.pages} 页幻灯片` }
+      const { text, meta, note } = await parsePptx(file)
+      return { ...base, text, meta, note }
     }
     if (ext === 'pdf') {
-      const { text, meta } = await parsePdf(file)
-      return { ...base, text, meta, note: `已读取 ${meta.pages} 页文字` }
+      const { text, meta, note } = await parsePdf(file)
+      return { ...base, text, meta, note }
     }
     if (kind === 'text') {
       const text = normalizeText(await file.text())

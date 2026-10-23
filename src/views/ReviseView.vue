@@ -11,8 +11,11 @@ import DiffView from '../components/DiffView.vue'
 import IssueList from '../components/IssueList.vue'
 import FileDrop from '../components/FileDrop.vue'
 import ModelTrace from '../components/ModelTrace.vue'
+import ParseDebug from '../components/ParseDebug.vue'
+import ProfileSwitcher from '../components/ProfileSwitcher.vue'
 import { toast } from '../composables/useToast'
 import { useModelTrace } from '../composables/useModelTrace'
+import { debugState } from '../composables/useDebug'
 
 const router = useRouter()
 const revision = state.revision
@@ -25,6 +28,8 @@ const parsing = ref(false)
 const mode = ref(revision.mode || (remoteConfigured.value ? 'remote' : 'local'))
 const pendingMedia = reactive([])
 const mediaText = reactive({})
+// Debug 模式用：保存最近一次上传文件的解析结果
+const lastParsed = ref([])
 let controller = null
 
 const {
@@ -187,6 +192,7 @@ async function handleFiles(files) {
   parsing.value = true
   try {
     const list = await parseFiles(files)
+    lastParsed.value = list
     const withText = list.filter((m) => m.text && m.status === 'parsed')
     if (withText.length) {
       revision.source = withText.map((m) => m.text).join('\n\n')
@@ -282,13 +288,11 @@ onBeforeUnmount(() => controller?.abort())
         </p>
       </div>
       <div class="row row--wrap">
+        <ProfileSwitcher v-if="activeProfile" variant="brick" />
         <span class="badge badge--teal">{{ familyLabel }}</span>
         <span class="badge" :class="mode === 'remote' ? 'badge--teal' : ''">
           {{ mode === 'remote' ? '远程模型改稿' : '本地规则改稿' }}
         </span>
-        <RouterLink v-if="activeProfile" to="/profiles" class="badge">
-          档案：{{ activeProfile.name }}
-        </RouterLink>
       </div>
     </div>
 
@@ -351,6 +355,8 @@ onBeforeUnmount(() => controller?.abort())
 
           <ModelTrace v-if="trace.visible" :trace="trace" title="模型改稿过程" />
         </section>
+
+        <ParseDebug v-if="debugState.enabled" :items="lastParsed" title="文件解析结果" />
 
         <section v-if="activeProfile" class="card card--tight">
           <div class="card__title" style="font-size: 14px">改稿依据</div>

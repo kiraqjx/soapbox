@@ -1,6 +1,8 @@
 <script setup>
 import { RouterLink } from 'vue-router'
 import { activeProfile } from '../stores/workspace'
+import { debugState, toggleDebug } from '../composables/useDebug'
+import ProfileSwitcher from './ProfileSwitcher.vue'
 
 const nav = [
   { to: '/', label: '首页', exact: true },
@@ -33,10 +35,19 @@ const nav = [
         </RouterLink>
       </nav>
 
-      <RouterLink v-if="activeProfile" to="/profiles" class="header-chip" title="当前场景档案">
-        <b>档</b>
-        <span>{{ activeProfile.name }}</span>
-      </RouterLink>
+      <ProfileSwitcher v-if="activeProfile" variant="chip" />
+
+      <button
+        class="debug-toggle"
+        :class="{ 'is-on': debugState.enabled }"
+        type="button"
+        :aria-pressed="debugState.enabled"
+        :title="debugState.enabled ? '关闭 Debug 模式' : '打开 Debug 模式，查看文件解析结果'"
+        @click="toggleDebug"
+      >
+        <span class="debug-toggle__dot"></span>
+        Debug
+      </button>
     </div>
   </header>
 </template>

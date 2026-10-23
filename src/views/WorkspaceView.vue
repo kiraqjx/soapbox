@@ -23,8 +23,11 @@ import { countChars, truncate } from '../services/text'
 import FileDrop from '../components/FileDrop.vue'
 import ChatPanel from '../components/ChatPanel.vue'
 import ModelTrace from '../components/ModelTrace.vue'
+import ParseDebug from '../components/ParseDebug.vue'
+import ProfileSwitcher from '../components/ProfileSwitcher.vue'
 import { toast } from '../composables/useToast'
 import { useModelTrace } from '../composables/useModelTrace'
+import { debugState } from '../composables/useDebug'
 
 const router = useRouter()
 
@@ -277,9 +280,7 @@ onBeforeUnmount(() => {
         </p>
       </div>
       <div class="row row--wrap">
-        <RouterLink v-if="activeProfile" to="/profiles" class="badge badge--brick" style="padding: 6px 12px">
-          当前档案：{{ activeProfile.name }}
-        </RouterLink>
+        <ProfileSwitcher v-if="activeProfile" variant="brick" />
         <span class="badge badge--teal">{{ familyLabel }}</span>
         <span class="badge" :class="mode === 'remote' ? 'badge--teal' : ''">
           {{ remoteConfigured ? '远程模型已配置' : '本地引擎模式' }}
@@ -320,7 +321,6 @@ onBeforeUnmount(() => {
 
               <div class="tiny muted" style="margin-top: 6px">
                 {{ m.note }}
-                <span v-if="m.meta?.pages"> · {{ m.meta.pages }} 页</span>
               </div>
 
               <div v-if="m.status === 'needs-transcript' || m.status === 'reference'" class="media-note">
@@ -342,9 +342,11 @@ onBeforeUnmount(() => {
           </div>
 
           <p v-else class="field__hint" style="margin: 10px 0 0">
-            支持 .pptx / .docx / .pdf / .txt / .md / 图片 / 音视频。PPT 会按页抽出文字与标题，Word 按段落读取。
+            支持 .pptx / .docx / .pdf / .txt / .md / 图片 / 音视频。PPT 会按页抽出文字、标题与备注，Word 按段落读取；PDF 按坐标还原分栏并去掉页眉页脚。
           </p>
         </section>
+
+        <ParseDebug v-if="debugState.enabled" :items="state.materials" title="素材解析结果" />
 
         <section class="card" data-tour="workspace-generate">
           <div class="card__head">
