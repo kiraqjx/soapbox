@@ -13,13 +13,29 @@ export const SCENE_FAMILIES = [
   { id: 'ceremony', name: '主持致辞', short: '致辞', mark: '❖', desc: '把场面撑住，把话说圆' },
 ]
 
+/** 自定义场合类型：选中后整段提示词由用户自己写 */
+export const CUSTOM_SCENE = '自定义'
+
 export const FAMILY_SCENES = {
-  report: ['项目进展汇报', '周会/例会发言', '季度述职', '风险预警', '资源申请', '复盘总结'],
-  talk: ['主题演讲', '行业大会分享', 'TED 式短演讲', '年会发言', '产品发布', '校园宣讲'],
-  share: ['团队内部分享', '技术/业务沙龙', '项目复盘分享', '方法论分享', '读书/学习分享'],
-  pitch: ['客户提案', '商务路演', '融资路演', '方案评审', '内部立项'],
-  defense: ['晋升答辩', '面试自我介绍', '项目答辩', '竞标答疑', '评审问答'],
-  ceremony: ['年会主持', '活动开场致辞', '颁奖词', '婚礼致辞', '毕业致辞', '送别发言'],
+  report: ['项目进展汇报', '周会/例会发言', '季度述职', '风险预警', '资源申请', '复盘总结', CUSTOM_SCENE],
+  talk: ['主题演讲', '行业大会分享', 'TED 式短演讲', '年会发言', '产品发布', '校园宣讲', CUSTOM_SCENE],
+  share: ['团队内部分享', '技术/业务沙龙', '项目复盘分享', '方法论分享', '读书/学习分享', CUSTOM_SCENE],
+  pitch: ['客户提案', '商务路演', '融资路演', '方案评审', '内部立项', CUSTOM_SCENE],
+  defense: ['晋升答辩', '面试自我介绍', '项目答辩', '竞标答疑', '评审问答', CUSTOM_SCENE],
+  ceremony: ['年会主持', '活动开场致辞', '颁奖词', '婚礼致辞', '毕业致辞', '送别发言', CUSTOM_SCENE],
+}
+
+export function isCustomScene(profile) {
+  return profile?.sceneType === CUSTOM_SCENE
+}
+
+export function customPromptOf(profile) {
+  return String(profile?.customPrompt || '').trim()
+}
+
+/** 选了自定义场合、并且真的写了提示词，才走「全自定义」模式 */
+export function hasCustomPrompt(profile) {
+  return isCustomScene(profile) && customPromptOf(profile) !== ''
 }
 
 export const FAMILY_AUDIENCES = {
@@ -91,6 +107,8 @@ export const SCENE_TIPS = {
   婚礼致辞: '讲一件只有你知道的小事，胜过所有形容词。',
   毕业致辞: '给一句能带走的话，别给十条建议。',
   送别发言: '讲具体的事，允许停顿，不要急着煽情。',
+  // 自定义场合
+  自定义: '整段提示词由你自己写，档案里的对象、时长、风格等字段不再自动拼接。',
 }
 
 export const GOAL_TIPS = {

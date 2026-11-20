@@ -45,6 +45,7 @@ export function createProfile(patch = {}) {
     habit: '',
     occasion: '',
     interaction: '不设互动',
+    customPrompt: '', // 场合类型选「自定义」时，整段提示词由用户填写
     ...patch,
   }
 }
@@ -60,6 +61,7 @@ export function normalizeProfile(profile = {}) {
   return {
     occasion: '',
     interaction: '不设互动',
+    customPrompt: '',
     ...profile,
     sceneFamily: family,
     sceneType: scenes.includes(profile.sceneType) ? profile.sceneType : scenes[0],

@@ -1427,7 +1427,9 @@ export async function generateDraft({ profile, materials, extra = '', settings, 
     const system = packetToSystemPrompt(packet)
     const userContent = [
       extra ? `额外要求：${extra}` : '',
-      `请根据场景档案与素材，输出一份可以直接开口的${packet.family.name}讲稿。`,
+      packet.custom?.enabled
+        ? '请严格按上面的提示词输出。'
+        : `请根据场景档案与素材，输出一份可以直接开口的${packet.family.name}讲稿。`,
       materials.length ? `素材原文：\n${buildMaterialDigestText(materials)}` : '暂无素材，请输出骨架稿。',
     ]
       .filter(Boolean)

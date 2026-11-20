@@ -12,8 +12,10 @@ import {
   GOAL_TIPS,
   SCENE_TIPS,
   charsPerMinute,
+  customPromptOf,
   familyOf,
   familyRules,
+  hasCustomPrompt,
 } from './scenes.js'
 
 export { SCENE_TIPS, GOAL_TIPS, FAMILY_STRUCTURE } from './scenes.js'
@@ -69,24 +71,30 @@ export function buildContextPacket(profile, materials) {
   const address = addressOf(safeProfile)
   const scene = safeProfile.sceneType || '项目进展汇报'
   const structure = FAMILY_STRUCTURE[family] || FAMILY_STRUCTURE.report
-  const rules = [
-    `这是一次 ${minutes} 分钟的${familyMeta.name}（${scene}），按中文口播每分钟约 ${cpm} 字计算，正文控制在 ${Math.round(
-      chars * 0.85,
-    )}–${Math.round(chars * 1.15)} 字。`,
-    `听众/对象是「${safeProfile.audienceType || '直属上级'}」，称呼用「${address}」。`,
-    `表达风格：${safeProfile.tone || '稳重务实'}。`,
-    `结构：${structure.join(' → ')}。`,
-    GOAL_TIPS[safeProfile.goal] || '',
-    SCENE_TIPS[scene] || '',
-    safeProfile.occasion ? `场合：${safeProfile.occasion}。` : '',
-    safeProfile.interaction && safeProfile.interaction !== '不设互动'
-      ? `互动方式：${safeProfile.interaction}，请在稿中留出互动位。`
-      : '',
-    ...familyRules(family, safeProfile),
-  ].filter(Boolean)
+  // 自定义场合：整段提示词由用户提供，其它字段不再自动拼进去
+  const customPrompt = customPromptOf(safeProfile)
+  const custom = hasCustomPrompt(safeProfile)
+  const rules = custom
+    ? []
+    : [
+        `这是一次 ${minutes} 分钟的${familyMeta.name}（${scene}），按中文口播每分钟约 ${cpm} 字计算，正文控制在 ${Math.round(
+          chars * 0.85,
+        )}–${Math.round(chars * 1.15)} 字。`,
+        `听众/对象是「${safeProfile.audienceType || '直属上级'}」，称呼用「${address}」。`,
+        `表达风格：${safeProfile.tone || '稳重务实'}。`,
+        `结构：${structure.join(' → ')}。`,
+        GOAL_TIPS[safeProfile.goal] || '',
+        SCENE_TIPS[scene] || '',
+        safeProfile.occasion ? `场合：${safeProfile.occasion}。` : '',
+        safeProfile.interaction && safeProfile.interaction !== '不设互动'
+          ? `互动方式：${safeProfile.interaction}，请在稿中留出互动位。`
+          : '',
+        ...familyRules(family, safeProfile),
+      ].filter(Boolean)
 
   return {
     version: 'ctx-2',
+    custom: { enabled: custom, prompt: custom ? customPrompt : '' },
     family: {
       id: family,
       name: familyMeta.name,
@@ -108,7 +116,7 @@ export function buildContextPacket(profile, materials) {
       targetChars: chars,
       tone: safeProfile.tone || '稳重务实',
       goal: safeProfile.goal || '推动决策',
-      sceneTip: SCENE_TIPS[scene] || '',
+      sceneTip: custom ? '' : SCENE_TIPS[scene] || '',
       occasion: safeProfile.occasion || '',
       interaction: safeProfile.interaction || '不设互动',
     },
@@ -127,6 +135,8 @@ export function buildContextPacket(profile, materials) {
 }
 
 export function packetToPreview(packet) {
+  // 自定义模式：预览就是那段提示词本身，不加任何额外说明
+  if (packet.custom?.enabled) return packet.custom.prompt
   const lines = []
   lines.push(`# 场景上下文 · ${packet.profileName}`)
   lines.push(`「场景族」${packet.family.name}（${packet.family.desc}）`)
@@ -167,6 +177,21 @@ export function packetToPreview(packet) {
 }
 
 export function packetToSystemPrompt(packet) {
+  if (packet.custom?.enabled) {
+    // 全自定义模式：提示词整段由用户提供，只在后面附上素材原文
+    const parts = [packet.custom.prompt]
+    if (packet.materials.length) {
+      const materialBlock = packet.materials
+        .map(
+          (m, i) =>
+            `--- 素材 ${i + 1}：${m.name}（${m.kind}${m.pages ? `，${m.pages} 页` : ''}）---\n${m.excerpt}`,
+        )
+        .join('\n\n')
+      parts.push('【素材】', materialBlock)
+    }
+    return parts.join('\n\n')
+  }
+
   const materialBlock = packet.materials.length
     ? packet.materials
         .map(

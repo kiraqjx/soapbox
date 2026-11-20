@@ -13,6 +13,7 @@ import {
 } from '../stores/workspace'
 import {
   ADDRESS_MAP,
+  CUSTOM_SCENE,
   FAMILY_AUDIENCES,
   FAMILY_GOALS,
   FAMILY_LABEL,
@@ -44,12 +45,13 @@ const scenes = computed(() => FAMILY_SCENES[family.value] || [])
 const audiences = computed(() => FAMILY_AUDIENCES[family.value] || [])
 const goals = computed(() => FAMILY_GOALS[family.value] || [])
 const sceneTip = computed(() => SCENE_TIPS[form.sceneType] || '')
+const isCustom = computed(() => form.sceneType === CUSTOM_SCENE)
 const packet = computed(() => buildContextPacket(form, state.materials))
 
 const dirty = computed(() => {
   const current = activeProfile.value
   if (!current) return false
-  return ['name', 'selfRole', 'audienceType', 'audienceName', 'sceneType', 'duration', 'tone', 'goal', 'taboos', 'background', 'habit', 'sceneFamily', 'occasion', 'interaction'].some(
+  return ['name', 'selfRole', 'audienceType', 'audienceName', 'sceneType', 'duration', 'tone', 'goal', 'taboos', 'background', 'habit', 'sceneFamily', 'occasion', 'interaction', 'customPrompt'].some(
     (key) => form[key] !== current[key],
   )
 })
@@ -202,6 +204,7 @@ function save() {
     habit: form.habit,
     occasion: form.occasion || '',
     interaction: form.interaction || '不设互动',
+    customPrompt: form.customPrompt || '',
   })
   toast('存好了，之后的稿子都会带着这个场合')
 }
@@ -385,8 +388,30 @@ function removeCurrent() {
                 <select v-model="form.sceneType" class="select">
                   <option v-for="scene in scenes" :key="scene" :value="scene">{{ scene }}</option>
                 </select>
+                <span class="field__hint">选「自定义」后，整段提示词由你自己写。</span>
               </label>
             </div>
+
+            <label class="field">
+              <span class="field__label">
+                自定义提示词
+                <span v-if="!isCustom" class="badge" style="margin-left: 6px; font-weight: 400">未启用</span>
+              </span>
+              <textarea
+                v-model="form.customPrompt"
+                class="textarea"
+                :disabled="!isCustom"
+                :placeholder="
+                  isCustom
+                    ? '例如：\n你是一位资深技术负责人。请把我提供的素材改写成一篇 5 分钟的技术分享讲稿：\n1. 开场用一个具体故障场景把听众带进来；\n2. 正文分三段，每段先给结论再给证据；\n3. 全文口语化，句子不超过 25 字，不要使用 Markdown 符号；\n4. 结尾给一句能被记住的话。'
+                    : '把上面的「场合类型」切到「自定义」，这里就能自己写整段提示词了。'
+                "
+                style="min-height: 220px; font-family: var(--font-mono); font-size: 13px"
+              ></textarea>
+              <span class="field__hint">
+                这段文字会原样作为系统提示词发给模型：档案里的对象、时长、风格、结构等字段不再自动拼接，素材仍会附在末尾。留空则仍按上面场景族的通用规则生成；未连接模型时（本地规则引擎）不读这段提示词。
+              </span>
+            </label>
 
             <div class="grid-2">
               <label class="field">
